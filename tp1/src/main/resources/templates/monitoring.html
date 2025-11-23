@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Tableau de Bord Spring Boot Actuator & Micrometer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial,sans-serif; background: #f0f2f5; margin:0; padding:0; }
+        header { background:#3949ab;color:white;padding:20px;text-align:center;font-size:24px; }
+        .container { display:flex; flex-direction:column; gap:20px; padding:20px; align-items:center; }
+
+        /* Ligne des métriques */
+        .metrics-row { display:flex; gap:20px; flex-wrap:wrap; justify-content:center; }
+        .card { background:white; padding:20px; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1); width:200px; text-align:center; }
+        .card h2 { margin-bottom:10px; font-size:16px; }
+        .status-up { color:green; font-weight:bold; }
+        .status-down { color:red; font-weight:bold; }
+
+        /* Charts */
+        .charts-row { display:flex; gap:20px; flex-wrap:wrap; justify-content:center; width:100%; }
+        .chart-card { background:white; padding:20px; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1); width:300px; text-align:center; }
+        canvas { margin-top:10px; }
+    </style>
+</head>
+<body>
+<header>Tableau de Bord Spring Boot</header>
+
+<div class="container">
+
+    <!-- Santé de l'application et uptime -->
+    <div class="metrics-row">
+        <div class="card">
+            <h2>État de l'application</h2>
+            <p id="healthStatus" class="status-up">UP</p>
+        </div>
+        <div class="card">
+            <h2>Temps de fonctionnement (s)</h2>
+            <p id="uptimeValue">0</p>
+        </div>
+    </div>
+
+    <!-- Mémoire, CPU, Requêtes HTTP côte à côte -->
+    <div class="metrics-row">
+        <div class="card">
+            <h2>Mémoire (MB)</h2>
+            <p id="memoryValue">0</p>
+        </div>
+        <div class="card">
+            <h2>CPU (%)</h2>
+            <p id="cpuValue">0</p>
+        </div>
+        <div class="card">
+            <h2>Requêtes HTTP</h2>
+            <p id="httpValue">0</p>
+        </div>
+    </div>
+
+    <!-- Graphiques -->
+    <div class="charts-row">
+        <div class="chart-card">
+            <h2>Utilisation Mémoire</h2>
+            <canvas id="memoryChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <h2>Utilisation CPU</h2>
+            <canvas id="cpuChart"></canvas>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // Initialisation des graphiques
+    const memoryCtx = document.getElementById('memoryChart').getContext('2d');
+    const memoryChart = new Chart(memoryCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Mémoire utilisée','Mémoire libre'],
+            datasets: [{ data: [0, 1], backgroundColor: ['#42a5f5','#cfd8dc'] }]
+        },
+        options: { responsive:true, plugins:{ legend:{ position:'bottom' } } }
+    });
+
+    const cpuCtx = document.getElementById('cpuChart').getContext('2d');
+    const cpuChart = new Chart(cpuCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['CPU utilisé','CPU libre'],
+            datasets: [{ data: [0, 100], backgroundColor: ['#ef5350','#cfd8dc'] }]
+        },
+        options: { responsive:true, plugins:{ legend:{ position:'bottom' } } }
+    });
+
+    // Récupération des métriques depuis le backend
+    async function fetchMetrics() {
+        try {
+            const res = await fetch('/monitoring/data');
+            const data = await res.json();
+
+            // Santé de l'application
+            const health = data.health.status;
+            document.getElementById('healthStatus').textContent = health;
+            document.getElementById('healthStatus').className = health==='UP'?'status-up':'status-down';
+
+            // Mémoire
+            const memUsedGB = data.memory.measurements.find(m => m.statistic==='VALUE').value / 1024 / 1024 / 1024;
+            const memTotalGB = data.memory.total ? data.memory.total / 1024 / 1024 / 1024 : memUsedGB*2;
+            document.getElementById('memoryValue').textContent = (memUsedGB*1024).toFixed(2) + ' MB';
+            memoryChart.data.datasets[0].data = [memUsedGB, Math.max(memTotalGB-memUsedGB,0)];
+            memoryChart.update();
+
+            // CPU
+            const cpuPercent = data.cpu.measurements.find(m => m.statistic==='VALUE').value * 100;
+            document.getElementById('cpuValue').textContent = cpuPercent.toFixed(2) + '%';
+            cpuChart.data.datasets[0].data = [cpuPercent, Math.max(100-cpuPercent,0)];
+            cpuChart.update();
+
+            // Uptime
+            const uptime = data.uptime.measurements.find(m => m.statistic==='VALUE').value;
+            document.getElementById('uptimeValue').textContent = uptime.toFixed(0);
+
+            // Requêtes HTTP
+            const httpCount = data.http.measurements.find(m => m.statistic==='COUNT').value;
+            document.getElementById('httpValue').textContent = httpCount.toFixed(0);
+
+        } catch (err) {
+            console.error('Erreur lors de la récupération des métriques:', err);
+        }
+    }
+
+    // Mise à jour toutes les 3 secondes
+    setInterval(fetchMetrics, 3000);
+    fetchMetrics();
+</script>
+
+</body>
+</html>

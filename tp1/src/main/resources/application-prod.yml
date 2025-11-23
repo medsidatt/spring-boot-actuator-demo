@@ -1,0 +1,24 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+actuator:
+  base-url: http://localhost:9090/monitoring
+
+management:
+  server:
+    port: 9090
+  endpoints:
+    web:
+      base-path: /monitoring
+      exposure:
+        include:
+          - health
+          - info
+          - metrics
+          - prometheus
+          - shutdown
+  endpoint:
+    health:
+      show-details: never
